@@ -12,7 +12,15 @@ import { env } from "./env";
  */
 export async function createDbClient(): Promise<SupabaseClient> {
   const { getToken } = await auth();
-  const token = await getToken();
+  let token: string | null = null;
+  try {
+    token = await getToken({ template: "supabase" });
+  } catch {
+    token = null;
+  }
+  if (!token) {
+    token = await getToken();
+  }
 
   return createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_ANON_KEY, {
     auth: {
