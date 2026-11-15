@@ -9,6 +9,7 @@ import {
   type Node,
 } from "@xyflow/react";
 import type { FoldedFolderNode } from "@/lib/graph/types";
+import { classifyFile } from "@/lib/taxonomy";
 
 export interface FolderNodeData extends Record<string, unknown> {
   node: FoldedFolderNode;
@@ -17,6 +18,8 @@ export interface FolderNodeData extends Record<string, unknown> {
   isSelected: boolean;
   selectedFilePath: string | null;
   connectedFilePaths: Set<string> | null;
+  activeCategoryId: string | null;
+  matchingFileCount: number | null;
   hoveredFilePath: string | null;
   hoveredNodeId: string | null;
   onToggleOpen: (nodeId: string) => void;
@@ -38,6 +41,8 @@ function FolderNodeComponent({ data }: NodeProps<FolderNodeType>) {
     isSelected,
     selectedFilePath,
     connectedFilePaths,
+    activeCategoryId,
+    matchingFileCount,
     hoveredFilePath,
     hoveredNodeId,
     onToggleOpen,
@@ -109,9 +114,18 @@ function FolderNodeComponent({ data }: NodeProps<FolderNodeType>) {
           </div>
 
           <div className="flex items-center gap-2 text-[10px] font-mono shrink-0">
-            <span className="text-zinc-500 dark:text-zinc-400">
-              {node.fileCount} files
-            </span>
+            {activeCategoryId !== null ? (
+              <span
+                className="font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 rounded text-[10px] tabular-nums"
+                title={`${matchingFileCount ?? 0} files match active category`}
+              >
+                {matchingFileCount ?? 0} matched
+              </span>
+            ) : (
+              <span className="text-zinc-500 dark:text-zinc-400">
+                {node.fileCount} files
+              </span>
+            )}
             <span
               className="font-medium text-emerald-600 dark:text-emerald-400"
               title="Incoming dependencies (fan-in)"
@@ -138,17 +152,21 @@ function FolderNodeComponent({ data }: NodeProps<FolderNodeType>) {
               connectedFilePaths !== null &&
               connectedFilePaths.has(file.path);
             const isFileHovered = hoveredFilePath === file.path;
+
+            // Category matching check
+            const matchesCategory =
+              activeCategoryId === null ||
+              classifyFile(file.path).id === activeCategoryId;
+
             const isFileDimmed =
-              selectedFilePath !== null &&
-              !isFileSelected &&
-              !isFileConnected &&
-              !isFileHovered;
+              (selectedFilePath !== null &&
+                !isFileSelected &&
+                !isFileConnected &&
+                !isFileHovered) ||
+              (activeCategoryId !== null && !matchesCategory);
 
             return (
-              <div
-                key={file.path}
-                className="relative"
-              >
+              <div key={file.path} className="relative">
                 {/* Specific handles for this file row */}
                 <Handle
                   type="target"
@@ -178,8 +196,10 @@ function FolderNodeComponent({ data }: NodeProps<FolderNodeType>) {
                         ? "bg-blue-50/80 text-blue-900 dark:bg-blue-900/40 dark:text-blue-200 ring-1 ring-blue-400/60 font-medium"
                         : isFileConnected
                           ? "bg-zinc-100/90 text-zinc-900 dark:bg-zinc-800/80 dark:text-zinc-100 font-medium"
-                          : "text-zinc-700 hover:bg-zinc-100/80 dark:text-zinc-300 dark:hover:bg-zinc-800/50"
-                  } ${isFileDimmed ? "opacity-35" : "opacity-100"}`}
+                          : matchesCategory && activeCategoryId !== null
+                            ? "bg-zinc-100/60 text-zinc-900 dark:bg-zinc-800/50 dark:text-zinc-100"
+                            : "text-zinc-700 hover:bg-zinc-100/80 dark:text-zinc-300 dark:hover:bg-zinc-800/50"
+                  } ${isFileDimmed ? "opacity-25" : "opacity-100"}`}
                   title={file.path}
                 >
                   <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -260,9 +280,15 @@ function FolderNodeComponent({ data }: NodeProps<FolderNodeType>) {
               {node.label}
             </span>
           </div>
-          <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0">
-            {node.fileCount}f
-          </span>
+          {activeCategoryId !== null ? (
+            <span className="font-mono text-[10px] text-blue-600 dark:text-blue-400 font-semibold shrink-0">
+              {matchingFileCount ?? 0}m
+            </span>
+          ) : (
+            <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0">
+              {node.fileCount}f
+            </span>
+          )}
         </div>
 
         <div className="flex items-center justify-between text-[10px] font-mono pt-1 text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-800/80 w-full">

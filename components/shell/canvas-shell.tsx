@@ -45,6 +45,13 @@ export function CanvasShell({ data }: CanvasShellProps) {
     return extractCategories(data.files);
   }, [data.files]);
 
+  // Active category filter from the left rail (dims everything not in category)
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+
+  const handleSelectCategory = useCallback((id: string) => {
+    setActiveCategoryId((prev) => (prev === id ? null : id));
+  }, []);
+
   const repoName = useMemo(() => {
     return (
       data.rootDir.split(/[\\/]/).filter(Boolean).pop() || "repository"
@@ -154,7 +161,12 @@ export function CanvasShell({ data }: CanvasShellProps) {
   return (
     <div className="flex flex-1 h-full w-full overflow-hidden bg-zinc-100/60 dark:bg-zinc-950 font-sans">
       {/* Left Column: Category Rail */}
-      <CategoryRail categories={categories} totalFiles={data.files.length} />
+      <CategoryRail
+        categories={categories}
+        totalFiles={data.files.length}
+        activeCategoryId={activeCategoryId}
+        onSelectCategory={handleSelectCategory}
+      />
 
       {/* Center Column: Map Canvas */}
       <main className="flex-1 relative flex flex-col min-w-0 overflow-hidden bg-white dark:bg-zinc-950">
@@ -189,6 +201,7 @@ export function CanvasShell({ data }: CanvasShellProps) {
             onSelectNode={handleSelectNode}
             onSelectFile={handleSelectFile}
             onDeselect={handleDeselect}
+            activeCategoryId={activeCategoryId}
             hoveredFilePath={hoveredFilePath}
             hoveredNodeId={hoveredNodeId}
             onHoverFile={handleHoverFile}

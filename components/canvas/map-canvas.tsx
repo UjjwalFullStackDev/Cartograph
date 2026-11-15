@@ -20,6 +20,7 @@ import "@xyflow/react/dist/style.css";
 
 import type { AnalysisResult } from "@/lib/parser/types";
 import { calculateDeterministicLayout } from "@/lib/graph/layout";
+import { classifyFile } from "@/lib/taxonomy";
 import { FolderNode, type FolderNodeType } from "./folder-node";
 import type {
   FoldedFolderNode,
@@ -40,6 +41,7 @@ export interface MapCanvasProps {
   onSelectNode: (nodeId: string) => void;
   onSelectFile: (filePath: string) => void;
   onDeselect: () => void;
+  activeCategoryId: string | null;
   hoveredFilePath: string | null;
   hoveredNodeId: string | null;
   onHoverFile: (filePath: string | null) => void;
@@ -58,6 +60,7 @@ function InnerMapCanvas({
   onSelectNode,
   onSelectFile,
   onDeselect,
+  activeCategoryId,
   hoveredFilePath,
   hoveredNodeId,
   onHoverFile,
@@ -172,9 +175,24 @@ function InnerMapCanvas({
       const isOpen = openNodeIds.has(node.id);
       const isSelected =
         selected?.type === "node" && selected.node.id === node.id;
-      const isDimmed =
-        activeConnections !== null &&
-        !activeConnections.connectedNodeIds.has(node.id);
+
+      // Category match count for this panel/node
+      const matchingFileCount =
+        activeCategoryId !== null
+          ? node.files.filter(
+              (f) => classifyFile(f.path).id === activeCategoryId
+            ).length
+          : null;
+
+      // Dimming calculation:
+      // 1. If outside the active category filter, always dim the node.
+      // 2. Otherwise, if an item is selected, dim anything not connected to it.
+      let isDimmed = false;
+      if (activeCategoryId !== null && matchingFileCount === 0) {
+        isDimmed = true;
+      } else if (activeConnections !== null) {
+        isDimmed = !activeConnections.connectedNodeIds.has(node.id);
+      }
 
       const pos = positions.get(node.id) || { x: 0, y: 0 };
 
@@ -190,6 +208,8 @@ function InnerMapCanvas({
           selectedFilePath:
             selected?.type === "file" ? selected.file.path : null,
           connectedFilePaths: activeConnections?.connectedFilePaths || null,
+          activeCategoryId,
+          matchingFileCount,
           hoveredFilePath,
           hoveredNodeId,
           onToggleOpen: handleToggleOpen,
@@ -205,6 +225,7 @@ function InnerMapCanvas({
     openNodeIds,
     selected,
     activeConnections,
+    activeCategoryId,
     positions,
     hoveredFilePath,
     hoveredNodeId,
@@ -244,7 +265,21 @@ function InnerMapCanvas({
           (edge.sourceNodeId === hoveredNodeId ||
             edge.targetNodeId === hoveredNodeId));
 
-      if (selected) {
+      // Category match check for edges
+      const sourceMatchesCategory =
+        activeCategoryId === null ||
+        classifyFile(edge.sourceFilePath).id === activeCategoryId;
+      const targetMatchesCategory =
+        activeCategoryId === null ||
+        classifyFile(edge.targetFilePath).id === activeCategoryId;
+      const edgeMatchesCategory =
+        sourceMatchesCategory || targetMatchesCategory;
+
+      if (!edgeMatchesCategory) {
+        // Outside the active category filter: always dim
+        opacity = 0.08;
+        strokeColor = "#71717a";
+      } else if (selected) {
         isConnected =
           activeConnections?.connectedEdgeIds.has(edge.id) || false;
 
@@ -273,6 +308,13 @@ function InnerMapCanvas({
         strokeColor = "#3b82f6";
         strokeWidth = 2.4;
         opacity = 0.95;
+      } else if (activeCategoryId !== null) {
+        strokeColor =
+          sourceMatchesCategory && targetMatchesCategory
+            ? "#3b82f6"
+            : "#a1a1aa";
+        strokeWidth = 1.6;
+        opacity = 0.55;
       }
 
       return {
@@ -286,13 +328,13 @@ function InnerMapCanvas({
           stroke: strokeColor,
           strokeWidth,
           opacity,
-          transition: "opacity 150ms, stroke 150ms, stroke-width 150ms",
+          transition: "stroke 0.15s ease, stroke-width 0.15s ease, opacity 0.15s ease",
         },
         markerEnd: isConnected
           ? {
               type: MarkerType.ArrowClosed,
-              width: 10,
-              height: 10,
+              width: 12,
+              height: 12,
               color: strokeColor,
             }
           : undefined,
@@ -303,18 +345,13 @@ function InnerMapCanvas({
     openNodeIds,
     selected,
     activeConnections,
+    activeCategoryId,
     hoveredFilePath,
     hoveredNodeId,
   ]);
 
   return (
-    <div
-      className={`flex-1 h-full w-full relative bg-zinc-50 dark:bg-zinc-950 ${
-        isSpacePressed
-          ? "cursor-grab active:cursor-grabbing [&_.react-flow__node]:pointer-events-none [&_.react-flow__edge]:pointer-events-none select-none"
-          : ""
-      }`}
-    >
+    <div className="w-full h-full relative">
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}

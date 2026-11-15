@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import type { AnalysisResult } from "@/lib/parser/types";
 import { classifyFile, isUnidentifiedByConvention } from "@/lib/taxonomy";
 import { detectFramework } from "@/lib/parser/adapters";
 import type { SelectedTarget } from "@/components/canvas/map-canvas";
+import { computeTransitiveWalk } from "@/lib/graph/traversal";
+import { computeInsights } from "@/lib/graph/insights";
 
 interface DetailPaneProps {
   data: AnalysisResult;
@@ -30,6 +32,14 @@ export function DetailPane({
   activeTab,
   onTabChange,
 }: DetailPaneProps) {
+  // Transitive walk toggle state for a selected file: blast radius vs dependency chain
+  const [activeWalk, setActiveWalk] = useState<"blast" | "dependencies" | null>(
+    null
+  );
+
+  // Insights panel state in resting overview: starts collapsed as required
+  const [insightsExpanded, setInsightsExpanded] = useState<boolean>(false);
+
   const repoName = useMemo(() => {
     return (
       data.rootDir.split(/[\\/]/).filter(Boolean).pop() || "repository"
@@ -68,7 +78,12 @@ export function DetailPane({
       .sort((a, b) => b.fanOut - a.fanOut || a.path.localeCompare(b.path));
   }, [data.files]);
 
-  // For a selected file: unique resolved dependencies and dependents
+  // Repository-level mathematical insights
+  const repositoryInsights = useMemo(() => {
+    return computeInsights(data.files, data.edges);
+  }, [data.files, data.edges]);
+
+  // For a selected file: unique direct dependencies and dependents
   const fileConnections = useMemo(() => {
     if (!selection || selection.type !== "file") {
       return { dependencies: [], dependents: [] };
@@ -92,6 +107,82 @@ export function DetailPane({
       dependents: Array.from(srcSet).sort(),
     };
   }, [selection, data.edges]);
+
+  // Transitive blast radius (everything that breaks if this file changes, depth 2)
+  const blastRadius = useMemo(() => {
+    if (!selection || selection.type !== "file") {
+      return { items: [], totalCount: 0 };
+    }
+    return computeTransitiveWalk(
+      selection.file.path,
+      data.edges,
+      "dependents",
+      2
+    );
+  }, [selection, data.edges]);
+
+  // Transitive dependency chain (everything this file needs, depth 2)
+  const dependencyChain = useMemo(() => {
+    if (!selection || selection.type !== "file") {
+      return { items: [], totalCount: 0 };
+    }
+    return computeTransitiveWalk(
+      selection.file.path,
+      data.edges,
+      "dependencies",
+      2
+    );
+  }, [selection, data.edges]);
+
+  // Insights that apply specifically to the selected file
+  const activeFileInsights = useMemo(() => {
+    if (!selection || selection.type !== "file") return [];
+    const filePath = selection.file.path;
+    const items: Array<{ title: string; sentence: string; extra?: string }> =
+      [];
+
+    if (
+      repositoryInsights.unimported.files?.some((f) => f.path === filePath)
+    ) {
+      items.push({
+        title: repositoryInsights.unimported.title,
+        sentence: repositoryInsights.unimported.sentence,
+      });
+    }
+
+    if (
+      repositoryInsights.unusualFanIn.files?.some((f) => f.path === filePath)
+    ) {
+      items.push({
+        title: repositoryInsights.unusualFanIn.title,
+        sentence: repositoryInsights.unusualFanIn.sentence,
+        extra: `Imported by ${selection.file.fanIn} files`,
+      });
+    }
+
+    const cycleMatch = repositoryInsights.cycles.cycles?.find((c) =>
+      c.members.includes(filePath)
+    );
+    if (cycleMatch) {
+      items.push({
+        title: repositoryInsights.cycles.title,
+        sentence: repositoryInsights.cycles.sentence,
+        extra: cycleMatch.chain.join(" → "),
+      });
+    }
+
+    if (
+      repositoryInsights.oversized.files?.some((f) => f.path === filePath)
+    ) {
+      items.push({
+        title: repositoryInsights.oversized.title,
+        sentence: repositoryInsights.oversized.sentence,
+        extra: `${selection.file.lineCount.toLocaleString()} lines`,
+      });
+    }
+
+    return items;
+  }, [selection, repositoryInsights]);
 
   // For a selected folder: breakdown of categories inside it
   const folderCategoryBreakdown = useMemo(() => {
@@ -149,7 +240,7 @@ export function DetailPane({
       {/* Pane Content Body */}
       <div className="flex-1 overflow-y-auto p-3 text-[11px] font-mono [scrollbar-width:thin]">
         {activeTab === "explanation" ? (
-          /* Tab 2: Explanation (Empty state for Phase 5) */
+          /* Tab 2: Explanation (Empty state until model call) */
           <div className="h-full flex flex-col items-center justify-center text-center p-4">
             <div className="w-8 h-8 rounded border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-[10px] text-zinc-400 dark:text-zinc-500 font-mono mb-2.5">
               AI
@@ -318,6 +409,262 @@ export function DetailPane({
                 })}
               </div>
             </div>
+
+            {/* Insights Panel: Starts collapsed, never the first thing seen */}
+            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
+              <button
+                type="button"
+                onClick={() => setInsightsExpanded((prev) => !prev)}
+                className="w-full flex items-center justify-between py-1 text-left cursor-pointer group"
+                title="Toggle insights panel"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 font-mono">
+                    {insightsExpanded ? "▾" : "▸"}
+                  </span>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-600 dark:text-zinc-300">
+                    Insights
+                  </span>
+                </div>
+                <span className="text-[9px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 tabular-nums">
+                  {repositoryInsights.totalFindings} findings
+                </span>
+              </button>
+
+              {insightsExpanded && (
+                <div className="mt-2.5 space-y-4">
+                  {/* 1. Files nothing imports (leads the list, excludes framework conventions) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-300 font-semibold">
+                        {repositoryInsights.unimported.title}
+                      </span>
+                      <span className="text-[9px] text-zinc-400 tabular-nums">
+                        {repositoryInsights.unimported.count} files
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-zinc-400/90 mb-1.5 leading-tight">
+                      {repositoryInsights.unimported.sentence}
+                    </p>
+                    <div className="space-y-1 max-h-44 overflow-y-auto [scrollbar-width:thin]">
+                      {repositoryInsights.unimported.files?.map((file) => {
+                        const cat = classifyFile(file.path);
+                        const isHovered = hoveredFilePath === file.path;
+
+                        return (
+                          <button
+                            type="button"
+                            key={file.path}
+                            onClick={() => onSelectFilePath(file.path)}
+                            onMouseEnter={() => onHoverFilePath(file.path)}
+                            onMouseLeave={() => onHoverFilePath(null)}
+                            className={`w-full flex items-center justify-between px-2 py-1 rounded text-left cursor-pointer transition-colors ${
+                              isHovered
+                                ? "bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 ring-1 ring-blue-500/30"
+                                : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
+                            }`}
+                            title={file.path}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              <span
+                                className="h-1.5 w-1.5 rounded-full shrink-0"
+                                style={{ backgroundColor: cat.color }}
+                              />
+                              <span className="truncate">{file.path}</span>
+                            </div>
+                            {file.detail && (
+                              <span className="text-[9px] text-zinc-400 font-mono shrink-0 ml-1.5">
+                                {file.detail}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 2. Files an unusual number of things import */}
+                  <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/60">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-300 font-semibold">
+                        {repositoryInsights.unusualFanIn.title}
+                      </span>
+                      <span className="text-[9px] text-zinc-400 tabular-nums">
+                        {repositoryInsights.unusualFanIn.count} files
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-zinc-400/90 mb-1.5 leading-tight">
+                      {repositoryInsights.unusualFanIn.sentence}
+                    </p>
+                    <div className="space-y-1 max-h-44 overflow-y-auto [scrollbar-width:thin]">
+                      {repositoryInsights.unusualFanIn.files?.map((file) => {
+                        const cat = classifyFile(file.path);
+                        const isHovered = hoveredFilePath === file.path;
+
+                        return (
+                          <button
+                            type="button"
+                            key={file.path}
+                            onClick={() => onSelectFilePath(file.path)}
+                            onMouseEnter={() => onHoverFilePath(file.path)}
+                            onMouseLeave={() => onHoverFilePath(null)}
+                            className={`w-full flex items-center justify-between px-2 py-1 rounded text-left cursor-pointer transition-colors ${
+                              isHovered
+                                ? "bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 ring-1 ring-blue-500/30"
+                                : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
+                            }`}
+                            title={file.path}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              <span
+                                className="h-1.5 w-1.5 rounded-full shrink-0"
+                                style={{ backgroundColor: cat.color }}
+                              />
+                              <span className="truncate">{file.path}</span>
+                            </div>
+                            {file.detail && (
+                              <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-mono shrink-0 ml-1.5 font-medium">
+                                {file.detail}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 3. Import cycles */}
+                  <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/60">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-300 font-semibold">
+                        {repositoryInsights.cycles.title}
+                      </span>
+                      <span className="text-[9px] text-zinc-400 tabular-nums">
+                        {repositoryInsights.cycles.count} cycle
+                        {repositoryInsights.cycles.count !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-zinc-400/90 mb-1.5 leading-tight">
+                      {repositoryInsights.cycles.sentence}
+                    </p>
+                    {repositoryInsights.cycles.count === 0 ? (
+                      <div className="text-[10px] text-zinc-400 py-1 italic">
+                        No cyclic dependencies detected.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {repositoryInsights.cycles.cycles?.map(
+                          (cycle, cycleIdx) => (
+                            <div
+                              key={cycleIdx}
+                              className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800/80 space-y-1"
+                            >
+                              <div className="text-[9px] font-mono text-amber-600 dark:text-amber-400 font-semibold">
+                                Cycle #{cycleIdx + 1} ({cycle.chain.length - 1} hops)
+                              </div>
+                              <div className="space-y-1">
+                                {cycle.chain
+                                  .slice(0, cycle.chain.length - 1)
+                                  .map((filePath, hopIdx) => {
+                                    const isHovered =
+                                      hoveredFilePath === filePath;
+
+                                    return (
+                                      <div key={hopIdx} className="space-y-0.5">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            onSelectFilePath(filePath)
+                                          }
+                                          onMouseEnter={() =>
+                                            onHoverFilePath(filePath)
+                                          }
+                                          onMouseLeave={() =>
+                                            onHoverFilePath(null)
+                                          }
+                                          className={`w-full flex items-center gap-1.5 px-1.5 py-0.5 rounded text-left cursor-pointer transition-colors ${
+                                            isHovered
+                                              ? "bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 ring-1 ring-amber-500/30"
+                                              : "hover:bg-zinc-200/60 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                                          }`}
+                                          title={`Select ${filePath}`}
+                                        >
+                                          <span className="text-[9px] text-zinc-400 font-mono">
+                                            {hopIdx + 1}.
+                                          </span>
+                                          <span className="truncate flex-1">
+                                            {filePath}
+                                          </span>
+                                        </button>
+                                        <div className="pl-4 text-[9px] text-zinc-400 font-mono">
+                                          ↓ imports
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                <div className="pl-4 text-[9px] font-mono text-zinc-500 dark:text-zinc-400 truncate">
+                                  ↺ {cycle.chain[0]}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 4. Files that are simply too long (oversized) */}
+                  <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/60">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-300 font-semibold">
+                        {repositoryInsights.oversized.title}
+                      </span>
+                      <span className="text-[9px] text-zinc-400 tabular-nums">
+                        {repositoryInsights.oversized.count} files
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-zinc-400/90 mb-1.5 leading-tight">
+                      {repositoryInsights.oversized.sentence}
+                    </p>
+                    <div className="space-y-1 max-h-44 overflow-y-auto [scrollbar-width:thin]">
+                      {repositoryInsights.oversized.files?.map((file) => {
+                        const cat = classifyFile(file.path);
+                        const isHovered = hoveredFilePath === file.path;
+
+                        return (
+                          <button
+                            type="button"
+                            key={file.path}
+                            onClick={() => onSelectFilePath(file.path)}
+                            onMouseEnter={() => onHoverFilePath(file.path)}
+                            onMouseLeave={() => onHoverFilePath(null)}
+                            className={`w-full flex items-center justify-between px-2 py-1 rounded text-left cursor-pointer transition-colors ${
+                              isHovered
+                                ? "bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 ring-1 ring-blue-500/30"
+                                : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
+                            }`}
+                            title={file.path}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              <span
+                                className="h-1.5 w-1.5 rounded-full shrink-0"
+                                style={{ backgroundColor: cat.color }}
+                              />
+                              <span className="truncate">{file.path}</span>
+                            </div>
+                            {file.detail && (
+                              <span className="text-zinc-400 text-[9px] font-mono shrink-0 ml-1.5">
+                                {file.detail}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         ) : selection.type === "node" ? (
           /* Tab 1: Selected Folder State */
@@ -456,6 +803,27 @@ export function DetailPane({
               </div>
             </div>
 
+            {/* Applicable Insights for this file */}
+            {activeFileInsights.length > 0 && (
+              <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 space-y-1.5">
+                <span className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold block">
+                  Insight fact
+                </span>
+                {activeFileInsights.map((fi, i) => (
+                  <div key={i} className="text-[10px] leading-snug">
+                    <span className="text-zinc-700 dark:text-zinc-300">
+                      {fi.sentence}
+                    </span>
+                    {fi.extra && (
+                      <div className="text-[9px] font-mono text-zinc-400 dark:text-zinc-500 mt-0.5">
+                        {fi.extra}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Category and Line Count */}
             <div className="flex items-center justify-between py-1.5 border-y border-zinc-100 dark:border-zinc-800/80 text-[10px]">
               <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
@@ -470,7 +838,7 @@ export function DetailPane({
               </span>
             </div>
 
-            {/* Dependencies & Dependents Count Bar */}
+            {/* Direct Dependencies & Dependents Count Bar */}
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-2 rounded border border-zinc-100 dark:border-zinc-800/60">
                 <span className="text-[10px] text-zinc-400 block">
@@ -490,87 +858,249 @@ export function DetailPane({
               </div>
             </div>
 
-            {/* Full List of Dependencies (Imports) */}
-            <div>
-              <span className="text-[10px] uppercase tracking-wider text-zinc-400 block mb-1">
-                Depends on ({fileConnections.dependencies.length})
-              </span>
-              {fileConnections.dependencies.length === 0 ? (
-                <div className="text-[10px] text-zinc-400 py-1 italic">
-                  None (leaf file)
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {fileConnections.dependencies.map((targetPath) => {
-                    const cat = classifyFile(targetPath);
-                    const isHovered = hoveredFilePath === targetPath;
-
-                    return (
-                      <button
-                        type="button"
-                        key={targetPath}
-                        onClick={() => onSelectFilePath(targetPath)}
-                        onMouseEnter={() => onHoverFilePath(targetPath)}
-                        onMouseLeave={() => onHoverFilePath(null)}
-                        className={`w-full flex items-center gap-1.5 px-2 py-1 rounded text-left cursor-pointer transition-colors ${
-                          isHovered
-                            ? "bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 ring-1 ring-amber-500/40"
-                            : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
-                        }`}
-                        title={targetPath}
-                      >
-                        <span
-                          className="h-1.5 w-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: cat.color }}
-                        />
-                        <span className="truncate">{targetPath}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+            {/* Graph Action Buttons: Blast Radius & Dependency Chain */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveWalk((prev) => (prev === "blast" ? null : "blast"))
+                }
+                className={`px-2 py-1.5 rounded text-[10px] font-mono font-medium border text-center transition-colors cursor-pointer ${
+                  activeWalk === "blast"
+                    ? "bg-rose-50 border-rose-400 text-rose-800 dark:bg-rose-950/60 dark:border-rose-600 dark:text-rose-200 ring-1 ring-rose-500/30"
+                    : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
+                }`}
+                title="Calculate everything that breaks if this file changes (2 levels deep)"
+              >
+                Blast radius
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveWalk((prev) =>
+                    prev === "dependencies" ? null : "dependencies"
+                  )
+                }
+                className={`px-2 py-1.5 rounded text-[10px] font-mono font-medium border text-center transition-colors cursor-pointer ${
+                  activeWalk === "dependencies"
+                    ? "bg-amber-50 border-amber-400 text-amber-800 dark:bg-amber-950/60 dark:border-amber-600 dark:text-amber-200 ring-1 ring-amber-500/30"
+                    : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
+                }`}
+                title="Calculate everything this file needs (2 levels deep)"
+              >
+                Dependency chain
+              </button>
             </div>
 
-            {/* Full List of Dependents (Imported by) */}
-            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
-              <span className="text-[10px] uppercase tracking-wider text-zinc-400 block mb-1">
-                Depended on by ({fileConnections.dependents.length})
-              </span>
-              {fileConnections.dependents.length === 0 ? (
-                <div className="text-[10px] text-zinc-400 py-1 italic">
-                  None (entry point)
+            {/* Dynamic View: Active Walk or Direct Neighbor Lists */}
+            {activeWalk === "blast" ? (
+              /* View: Blast Radius */
+              <div className="space-y-2 pt-1 border-t border-zinc-100 dark:border-zinc-800/80">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-rose-600 dark:text-rose-400 font-semibold block">
+                      Blast radius ({blastRadius.totalCount})
+                    </span>
+                    <span className="text-[9px] text-zinc-400">
+                      Everything that breaks if this file changes (2 levels)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveWalk(null)}
+                    className="text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
+                  >
+                    close
+                  </button>
                 </div>
-              ) : (
-                <div className="space-y-1">
-                  {fileConnections.dependents.map((sourcePath) => {
-                    const cat = classifyFile(sourcePath);
-                    const isHovered = hoveredFilePath === sourcePath;
 
-                    return (
-                      <button
-                        type="button"
-                        key={sourcePath}
-                        onClick={() => onSelectFilePath(sourcePath)}
-                        onMouseEnter={() => onHoverFilePath(sourcePath)}
-                        onMouseLeave={() => onHoverFilePath(null)}
-                        className={`w-full flex items-center gap-1.5 px-2 py-1 rounded text-left cursor-pointer transition-colors ${
-                          isHovered
-                            ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 ring-1 ring-emerald-500/40"
-                            : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
-                        }`}
-                        title={sourcePath}
-                      >
-                        <span
-                          className="h-1.5 w-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: cat.color }}
-                        />
-                        <span className="truncate">{sourcePath}</span>
-                      </button>
-                    );
-                  })}
+                {blastRadius.items.length === 0 ? (
+                  <div className="text-[10px] text-zinc-400 py-1 italic">
+                    Nothing breaks if this file changes (leaf file).
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {blastRadius.items.map((item) => {
+                      const cat = classifyFile(item.path);
+                      const isHovered = hoveredFilePath === item.path;
+
+                      return (
+                        <button
+                          type="button"
+                          key={item.path}
+                          onClick={() => onSelectFilePath(item.path)}
+                          onMouseEnter={() => onHoverFilePath(item.path)}
+                          onMouseLeave={() => onHoverFilePath(null)}
+                          className={`w-full flex items-center justify-between px-2 py-1 rounded text-left cursor-pointer transition-colors ${
+                            isHovered
+                              ? "bg-rose-50 dark:bg-rose-950/60 text-rose-900 dark:text-rose-200 ring-1 ring-rose-500/30"
+                              : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
+                          }`}
+                          title={item.path}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <span
+                              className="h-1.5 w-1.5 rounded-full shrink-0"
+                              style={{ backgroundColor: cat.color }}
+                            />
+                            <span className="truncate">{item.path}</span>
+                          </div>
+                          <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 shrink-0 ml-1.5">
+                            hop {item.depth}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : activeWalk === "dependencies" ? (
+              /* View: Dependency Chain */
+              <div className="space-y-2 pt-1 border-t border-zinc-100 dark:border-zinc-800/80">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-semibold block">
+                      Dependency chain ({dependencyChain.totalCount})
+                    </span>
+                    <span className="text-[9px] text-zinc-400">
+                      Everything this file needs (2 levels)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveWalk(null)}
+                    className="text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
+                  >
+                    close
+                  </button>
                 </div>
-              )}
-            </div>
+
+                {dependencyChain.items.length === 0 ? (
+                  <div className="text-[10px] text-zinc-400 py-1 italic">
+                    This file has no dependencies.
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {dependencyChain.items.map((item) => {
+                      const cat = classifyFile(item.path);
+                      const isHovered = hoveredFilePath === item.path;
+
+                      return (
+                        <button
+                          type="button"
+                          key={item.path}
+                          onClick={() => onSelectFilePath(item.path)}
+                          onMouseEnter={() => onHoverFilePath(item.path)}
+                          onMouseLeave={() => onHoverFilePath(null)}
+                          className={`w-full flex items-center justify-between px-2 py-1 rounded text-left cursor-pointer transition-colors ${
+                            isHovered
+                              ? "bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 ring-1 ring-amber-500/30"
+                              : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
+                          }`}
+                          title={item.path}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <span
+                              className="h-1.5 w-1.5 rounded-full shrink-0"
+                              style={{ backgroundColor: cat.color }}
+                            />
+                            <span className="truncate">{item.path}</span>
+                          </div>
+                          <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 shrink-0 ml-1.5">
+                            hop {item.depth}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* View: Direct Dependencies & Dependents */
+              <>
+                {/* Full List of Dependencies (Imports) */}
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-400 block mb-1">
+                    Depends on ({fileConnections.dependencies.length})
+                  </span>
+                  {fileConnections.dependencies.length === 0 ? (
+                    <div className="text-[10px] text-zinc-400 py-1 italic">
+                      None (leaf file)
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {fileConnections.dependencies.map((targetPath) => {
+                        const cat = classifyFile(targetPath);
+                        const isHovered = hoveredFilePath === targetPath;
+
+                        return (
+                          <button
+                            type="button"
+                            key={targetPath}
+                            onClick={() => onSelectFilePath(targetPath)}
+                            onMouseEnter={() => onHoverFilePath(targetPath)}
+                            onMouseLeave={() => onHoverFilePath(null)}
+                            className={`w-full flex items-center gap-1.5 px-2 py-1 rounded text-left cursor-pointer transition-colors ${
+                              isHovered
+                                ? "bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 ring-1 ring-amber-500/40"
+                                : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
+                            }`}
+                            title={targetPath}
+                          >
+                            <span
+                              className="h-1.5 w-1.5 rounded-full shrink-0"
+                              style={{ backgroundColor: cat.color }}
+                            />
+                            <span className="truncate">{targetPath}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Full List of Dependents (Imported by) */}
+                <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-400 block mb-1">
+                    Depended on by ({fileConnections.dependents.length})
+                  </span>
+                  {fileConnections.dependents.length === 0 ? (
+                    <div className="text-[10px] text-zinc-400 py-1 italic">
+                      None (entry point)
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {fileConnections.dependents.map((sourcePath) => {
+                        const cat = classifyFile(sourcePath);
+                        const isHovered = hoveredFilePath === sourcePath;
+
+                        return (
+                          <button
+                            type="button"
+                            key={sourcePath}
+                            onClick={() => onSelectFilePath(sourcePath)}
+                            onMouseEnter={() => onHoverFilePath(sourcePath)}
+                            onMouseLeave={() => onHoverFilePath(null)}
+                            className={`w-full flex items-center gap-1.5 px-2 py-1 rounded text-left cursor-pointer transition-colors ${
+                              isHovered
+                                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 ring-1 ring-emerald-500/40"
+                                : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
+                            }`}
+                            title={sourcePath}
+                          >
+                            <span
+                              className="h-1.5 w-1.5 rounded-full shrink-0"
+                              style={{ backgroundColor: cat.color }}
+                            />
+                            <span className="truncate">{sourcePath}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
