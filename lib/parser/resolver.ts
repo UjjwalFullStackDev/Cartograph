@@ -188,11 +188,6 @@ export function resolveModuleSpecifier(
   const isRootRelative = specifier.startsWith("/");
   const isAliased = matchesConfigPaths(specifier, context.compilerOptions.paths);
 
-  // If it's neither relative, root-relative, nor a tsconfig alias, it targets an external package
-  if (!isRelative && !isRootRelative && !isAliased) {
-    return { type: "outside", specifier };
-  }
-
   const fullSourcePath = path.isAbsolute(sourceFilePath)
     ? sourceFilePath
     : path.join(context.rootDir, sourceFilePath);
@@ -210,8 +205,14 @@ export function resolveModuleSpecifier(
     const resolvedPath = normalizePath(resolved.resolvedFileName);
     const relToRoot = normalizePath(path.relative(context.rootDir, resolvedPath));
 
-    // If it resolved to node_modules or marked external by TypeScript
-    if (resolved.isExternalLibraryImport || relToRoot.startsWith("node_modules/") || relToRoot.includes("/node_modules/")) {
+    // If it resolved to node_modules, outside repository root, or marked external by TypeScript
+    if (
+      resolved.isExternalLibraryImport ||
+      relToRoot.startsWith("node_modules/") ||
+      relToRoot.includes("/node_modules/") ||
+      relToRoot.startsWith("../") ||
+      path.isAbsolute(relToRoot)
+    ) {
       return { type: "outside", specifier };
     }
 
@@ -221,7 +222,11 @@ export function resolveModuleSpecifier(
     }
 
     // Check if it's a declaration file inside the repo
-    if (relToRoot.endsWith(".d.ts")) {
+    if (
+      relToRoot.endsWith(".d.ts") ||
+      relToRoot.endsWith(".d.mts") ||
+      relToRoot.endsWith(".d.cts")
+    ) {
       return {
         type: "excluded",
         specifier,
@@ -239,24 +244,48 @@ export function resolveModuleSpecifier(
       };
     }
 
-    // If on disk within root
+    // If on disk within root but not in knownInternalFiles (e.g. non-code file or ignored dir)
     const absPath = path.resolve(context.rootDir, relToRoot);
     if (fs.existsSync(absPath)) {
-      return { type: "internal", targetPath: relToRoot };
+      return {
+        type: "excluded",
+        specifier,
+        reason: `resolved to excluded repository file (${relToRoot})`,
+      };
     }
   }
 
-  // Fallback: check manual direct resolution for extensionless or exact paths relative to source
+  // Fallback: check manual direct resolution for extensionless or exact paths relative to source / root
   const containingDir = path.dirname(fullSourcePath);
-  const directCandidate = path.resolve(containingDir, specifier);
+  const directCandidate = isRootRelative
+    ? path.resolve(context.rootDir, specifier.replace(/^\/+/, ""))
+    : path.resolve(containingDir, specifier);
+
   for (const testExt of ["", ".ts", ".tsx", ".js", ".jsx", ".mjs", "/index.ts", "/index.tsx", "/index.js"]) {
     const probe = directCandidate + testExt;
     if (fs.existsSync(probe) && fs.statSync(probe).isFile()) {
       const relProbe = normalizePath(path.relative(context.rootDir, probe));
-      if (!relProbe.startsWith("node_modules/")) {
-        return { type: "internal", targetPath: relProbe };
+      if (
+        !relProbe.startsWith("node_modules/") &&
+        !relProbe.includes("/node_modules/") &&
+        !relProbe.startsWith("../") &&
+        !path.isAbsolute(relProbe)
+      ) {
+        if (context.knownInternalFiles.has(relProbe)) {
+          return { type: "internal", targetPath: relProbe };
+        }
+        return {
+          type: "excluded",
+          specifier,
+          reason: `resolved to excluded repository file (${relProbe})`,
+        };
       }
     }
+  }
+
+  // If it's neither relative, root-relative, nor a tsconfig alias, it targets an external package
+  if (!isRelative && !isRootRelative && !isAliased) {
+    return { type: "outside", specifier };
   }
 
   // Failed resolution: construct helpful diagnostic message

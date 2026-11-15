@@ -104,7 +104,10 @@ export function walkRepository(
   rootDir: string,
   ignoredDirectories: string[] = DEFAULT_IGNORED_DIRECTORIES
 ): WalkResult {
-  const ignoredSet = new Set(ignoredDirectories);
+  const ignoredSet = new Set([
+    ...DEFAULT_IGNORED_DIRECTORIES,
+    ...(ignoredDirectories ?? []),
+  ]);
   const parseableFiles: ParsedFile[] = [];
   const skippedFiles: SkippedFile[] = [];
 
