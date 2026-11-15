@@ -161,7 +161,7 @@ export function DetailPane({
     }
 
     const cycleMatch = repositoryInsights.cycles.cycles?.find((c) =>
-      c.chain.includes(filePath)
+      c.members.includes(filePath)
     );
     if (cycleMatch) {
       items.push({

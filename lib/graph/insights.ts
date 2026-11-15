@@ -3,6 +3,7 @@ import { classifyFile } from "@/lib/taxonomy";
 
 export interface CycleFinding {
   chain: string[];
+  members: string[];
 }
 
 export interface InsightFileItem {
@@ -49,7 +50,7 @@ export function isFrameworkReached(filePath: string): boolean {
 
   // Next.js App/Pages Router conventions: page, route, layout, template, loading, error, not-found
   if (
-    /(^|\/)(app|pages|routes|api)\/.*(page|route|routes|layout|template|loading|error|not-found|global-error)\.[jt]sx?$/i.test(
+    /(^|\/)(app|pages|routes|api)\/(.*\/)?(page|route|routes|layout|template|loading|error|not-found|global-error)\.[jt]sx?$/i.test(
       normalized
     ) ||
     /\.(page|route|routes|layout)\.[jt]sx?$/i.test(normalized)
@@ -183,33 +184,52 @@ export function detectCyclesIterative(edges: ParsedEdge[]): CycleFinding[] {
     const sorted = [...scc].sort();
     const start = sorted[0];
 
-    // Reconstruct simple cycle from start back to start using BFS within the SCC
-    const queue: string[][] = [[start]];
-    const visited = new Set<string>();
-    let foundCycle: string[] | null = null;
-
-    while (queue.length > 0) {
-      const path = queue.shift()!;
-      const current = path[path.length - 1];
-
-      const neighbors = (adj.get(current) || []).filter((n) => sccSet.has(n));
-      for (const next of neighbors) {
-        if (next === start && path.length > 1) {
-          foundCycle = [...path, start];
-          break;
-        }
-        if (!visited.has(next)) {
-          visited.add(next);
-          queue.push([...path, next]);
-        }
-      }
-      if (foundCycle) break;
+    // Check if start has a direct self-loop
+    const startNeighbors = adj.get(start) || [];
+    if (startNeighbors.includes(start)) {
+      findings.push({ chain: [start, start], members: sorted });
+      continue;
     }
 
-    if (foundCycle) {
-      findings.push({ chain: foundCycle });
+    // Reconstruct simple cycle from start back to start using BFS predecessor mapping within the SCC
+    const queue: string[] = [start];
+    const parent = new Map<string, string>();
+    let closingNode: string | null = null;
+
+    while (queue.length > 0) {
+      const u = queue.shift()!;
+      const neighbors = (adj.get(u) || []).filter((n) => sccSet.has(n));
+
+      for (const v of neighbors) {
+        if (v === start) {
+          closingNode = u;
+          break;
+        }
+        if (!parent.has(v)) {
+          parent.set(v, u);
+          queue.push(v);
+        }
+      }
+      if (closingNode !== null) break;
+    }
+
+    if (closingNode !== null) {
+      const segment: string[] = [];
+      let curr = closingNode;
+      while (curr !== start) {
+        segment.push(curr);
+        curr = parent.get(curr)!;
+      }
+      segment.reverse();
+      findings.push({
+        chain: [start, ...segment, start],
+        members: sorted,
+      });
     } else {
-      findings.push({ chain: [...sorted, sorted[0]] });
+      findings.push({
+        chain: [...sorted, sorted[0]],
+        members: sorted,
+      });
     }
   }
 

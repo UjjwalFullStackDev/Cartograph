@@ -47,6 +47,7 @@ export function CategoryRail({
               <button
                 type="button"
                 key={category.id}
+                aria-pressed={isActive}
                 onClick={() => onSelectCategory(category.id)}
                 className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-mono transition-all cursor-pointer text-left ${
                   isActive

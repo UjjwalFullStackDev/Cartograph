@@ -14,6 +14,7 @@ console.log("       PHASE 6 VERIFICATION CHECKS       ");
 console.log("=========================================");
 
 // 1. Transitive Walk Check
+let hasFailures = false;
 console.log("\n--- 1. Blast Radius & Dependency Chain ---");
 const testFile = "src/stock/middlewares/auth.middleware.js";
 const blast = computeTransitiveWalk(testFile, data.edges, "dependents", 2);
@@ -47,6 +48,7 @@ console.log(
   `    Routes with 0 fan-in properly excluded: ${zeroFanInRoutes.length - falsePositives.length}/${zeroFanInRoutes.length}`
 );
 if (falsePositives.length > 0) {
+  hasFailures = true;
   console.error("    ERROR: Found routes incorrectly included in unimported:", falsePositives);
 }
 
@@ -83,11 +85,17 @@ for (const cat of categories) {
     panelSum += nodeMatches;
   }
   const ok = panelSum === cat.count;
-  if (!ok) allMatched = false;
+  if (!ok) {
+    allMatched = false;
+    hasFailures = true;
+  }
   console.log(
     `Category: ${cat.name.padEnd(12)} | Rail: ${String(cat.count).padStart(3)} | Panels Sum: ${String(panelSum).padStart(3)} | Match: ${ok}`
   );
 }
 console.log(`\nAll panel match counts sum precisely to rail numbers: ${allMatched}`);
+if (hasFailures) {
+  process.exitCode = 1;
+}
 console.log("=========================================\n");
 

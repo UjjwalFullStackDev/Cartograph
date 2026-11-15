@@ -185,13 +185,13 @@ function InnerMapCanvas({
           : null;
 
       // Dimming calculation:
-      // 1. If an item is selected, dim anything not connected to it.
-      // 2. Otherwise, if a category is selected in the rail, dim nodes with 0 matches.
+      // 1. If outside the active category filter, always dim the node.
+      // 2. Otherwise, if an item is selected, dim anything not connected to it.
       let isDimmed = false;
-      if (activeConnections !== null) {
+      if (activeCategoryId !== null && matchingFileCount === 0) {
+        isDimmed = true;
+      } else if (activeConnections !== null) {
         isDimmed = !activeConnections.connectedNodeIds.has(node.id);
-      } else if (activeCategoryId !== null) {
-        isDimmed = matchingFileCount === 0;
       }
 
       const pos = positions.get(node.id) || { x: 0, y: 0 };
@@ -265,7 +265,21 @@ function InnerMapCanvas({
           (edge.sourceNodeId === hoveredNodeId ||
             edge.targetNodeId === hoveredNodeId));
 
-      if (selected) {
+      // Category match check for edges
+      const sourceMatchesCategory =
+        activeCategoryId === null ||
+        classifyFile(edge.sourceFilePath).id === activeCategoryId;
+      const targetMatchesCategory =
+        activeCategoryId === null ||
+        classifyFile(edge.targetFilePath).id === activeCategoryId;
+      const edgeMatchesCategory =
+        sourceMatchesCategory || targetMatchesCategory;
+
+      if (!edgeMatchesCategory) {
+        // Outside the active category filter: always dim
+        opacity = 0.08;
+        strokeColor = "#71717a";
+      } else if (selected) {
         isConnected =
           activeConnections?.connectedEdgeIds.has(edge.id) || false;
 
@@ -295,19 +309,12 @@ function InnerMapCanvas({
         strokeWidth = 2.4;
         opacity = 0.95;
       } else if (activeCategoryId !== null) {
-        const sourceMatches =
-          classifyFile(edge.sourceFilePath).id === activeCategoryId;
-        const targetMatches =
-          classifyFile(edge.targetFilePath).id === activeCategoryId;
-
-        if (sourceMatches || targetMatches) {
-          strokeColor = sourceMatches && targetMatches ? "#3b82f6" : "#a1a1aa";
-          strokeWidth = 1.6;
-          opacity = 0.55;
-        } else {
-          opacity = 0.08;
-          strokeColor = "#71717a";
-        }
+        strokeColor =
+          sourceMatchesCategory && targetMatchesCategory
+            ? "#3b82f6"
+            : "#a1a1aa";
+        strokeWidth = 1.6;
+        opacity = 0.55;
       }
 
       return {
