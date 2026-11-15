@@ -85,7 +85,8 @@ function FolderNodeComponent({ data }: NodeProps<FolderNodeType>) {
         />
 
         {/* Panel Header: Clicking closes the panel back to folded node */}
-        <div
+        <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             onSelectNode(node.id);
@@ -93,7 +94,7 @@ function FolderNodeComponent({ data }: NodeProps<FolderNodeType>) {
           }}
           onMouseEnter={() => onHoverNode(node.id)}
           onMouseLeave={() => onHoverNode(null)}
-          className="flex h-10 items-center justify-between border-b border-zinc-200 px-3 py-1.5 bg-zinc-50/90 dark:border-zinc-800 dark:bg-zinc-900/90 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer transition-colors rounded-t-md shrink-0"
+          className="w-full flex h-10 items-center justify-between border-b border-zinc-200 px-3 py-1.5 bg-zinc-50/90 dark:border-zinc-800 dark:bg-zinc-900/90 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer transition-colors rounded-t-md shrink-0 text-left"
           title="Click to collapse panel"
         >
           <div className="flex items-center gap-1.5 min-w-0">
@@ -124,7 +125,7 @@ function FolderNodeComponent({ data }: NodeProps<FolderNodeType>) {
               ↑{node.fanOut}
             </span>
           </div>
-        </div>
+        </button>
 
         {/* Scrollable File Rows: nowheel and nodrag allow mousewheel scroll without zooming/dragging the canvas */}
         <div
@@ -146,57 +147,62 @@ function FolderNodeComponent({ data }: NodeProps<FolderNodeType>) {
             return (
               <div
                 key={file.path}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelectFile(file.path);
-                }}
-                onMouseEnter={() => onHoverFile(file.path)}
-                onMouseLeave={() => onHoverFile(null)}
-                className={`relative flex h-[26px] items-center justify-between px-2.5 rounded-xs text-[11px] font-mono transition-colors cursor-pointer ${
-                  isFileSelected
-                    ? "bg-blue-50 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200 font-medium ring-1 ring-blue-500/30"
-                    : isFileHovered
-                      ? "bg-blue-50/80 text-blue-900 dark:bg-blue-900/40 dark:text-blue-200 ring-1 ring-blue-400/60 font-medium"
-                      : isFileConnected
-                        ? "bg-zinc-100/90 text-zinc-900 dark:bg-zinc-800/80 dark:text-zinc-100 font-medium"
-                        : "text-zinc-700 hover:bg-zinc-100/80 dark:text-zinc-300 dark:hover:bg-zinc-800/50"
-                } ${isFileDimmed ? "opacity-35" : "opacity-100"}`}
-                title={file.path}
+                className="relative"
               >
                 {/* Specific handles for this file row */}
                 <Handle
                   type="target"
                   position={Position.Left}
                   id={`in-${file.path}`}
-                  className="!w-2 !h-2 !left-0 !bg-zinc-400 dark:!bg-zinc-500 !border !border-white dark:!border-zinc-900"
+                  className="!w-2 !h-2 !left-0 !bg-zinc-400 dark:!bg-zinc-500 !border !border-white dark:!border-zinc-900 z-10"
                 />
                 <Handle
                   type="source"
                   position={Position.Right}
                   id={`out-${file.path}`}
-                  className="!w-2 !h-2 !right-0 !bg-zinc-400 dark:!bg-zinc-500 !border !border-white dark:!border-zinc-900"
+                  className="!w-2 !h-2 !right-0 !bg-zinc-400 dark:!bg-zinc-500 !border !border-white dark:!border-zinc-900 z-10"
                 />
 
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <span
-                    className="h-1.5 w-1.5 rounded-full shrink-0"
-                    style={{ backgroundColor: file.color }}
-                  />
-                  <span className="truncate">{file.name}</span>
-                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectFile(file.path);
+                  }}
+                  onMouseEnter={() => onHoverFile(file.path)}
+                  onMouseLeave={() => onHoverFile(null)}
+                  className={`w-full relative flex h-[26px] items-center justify-between px-2.5 rounded-xs text-[11px] font-mono text-left transition-colors cursor-pointer ${
+                    isFileSelected
+                      ? "bg-blue-50 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200 font-medium ring-1 ring-blue-500/30"
+                      : isFileHovered
+                        ? "bg-blue-50/80 text-blue-900 dark:bg-blue-900/40 dark:text-blue-200 ring-1 ring-blue-400/60 font-medium"
+                        : isFileConnected
+                          ? "bg-zinc-100/90 text-zinc-900 dark:bg-zinc-800/80 dark:text-zinc-100 font-medium"
+                          : "text-zinc-700 hover:bg-zinc-100/80 dark:text-zinc-300 dark:hover:bg-zinc-800/50"
+                  } ${isFileDimmed ? "opacity-35" : "opacity-100"}`}
+                  title={file.path}
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span
+                      className="h-1.5 w-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor: file.color }}
+                    />
+                    <span className="truncate">{file.name}</span>
+                  </div>
 
-                <div className="flex items-center gap-1.5 text-[9px] text-zinc-400 dark:text-zinc-500 shrink-0 tabular-nums">
-                  {file.fanIn > 0 && (
-                    <span className="text-emerald-600/80 dark:text-emerald-400/80">
-                      ↓{file.fanIn}
-                    </span>
-                  )}
-                  {file.fanOut > 0 && (
-                    <span className="text-amber-600/80 dark:text-amber-400/80">
-                      ↑{file.fanOut}
-                    </span>
-                  )}
-                </div>
+                  <div className="flex items-center gap-1.5 text-[9px] text-zinc-400 dark:text-zinc-500 shrink-0 tabular-nums">
+                    {file.fanIn > 0 && (
+                      <span className="text-emerald-600/80 dark:text-emerald-400/80">
+                        ↓{file.fanIn}
+                      </span>
+                    )}
+                    {file.fanOut > 0 && (
+                      <span className="text-amber-600/80 dark:text-amber-400/80">
+                        ↑{file.fanOut}
+                      </span>
+                    )}
+                  </div>
+                </button>
               </div>
             );
           })}
@@ -208,14 +214,7 @@ function FolderNodeComponent({ data }: NodeProps<FolderNodeType>) {
   // Folded Node State
   return (
     <div
-      onClick={(e) => {
-        e.stopPropagation();
-        onSelectNode(node.id);
-        onToggleOpen(node.id);
-      }}
-      onMouseEnter={() => onHoverNode(node.id)}
-      onMouseLeave={() => onHoverNode(null)}
-      className={`rounded-md border bg-white dark:bg-zinc-900 p-2.5 flex flex-col justify-between transition-all duration-150 shadow-xs cursor-pointer select-none hover:border-zinc-400 dark:hover:border-zinc-500 ${
+      className={`rounded-md border bg-white dark:bg-zinc-900 transition-all duration-150 shadow-xs relative select-none hover:border-zinc-400 dark:hover:border-zinc-500 ${
         isSelected
           ? "border-blue-500 ring-2 ring-blue-500/20"
           : isNodeHovered
@@ -231,43 +230,56 @@ function FolderNodeComponent({ data }: NodeProps<FolderNodeType>) {
         type="target"
         position={Position.Left}
         id="target-default"
-        className="!w-2 !h-2 !bg-zinc-400 dark:!bg-zinc-500 !border !border-white dark:!border-zinc-900"
+        className="!w-2 !h-2 !bg-zinc-400 dark:!bg-zinc-500 !border !border-white dark:!border-zinc-900 z-10"
       />
       <Handle
         type="source"
         position={Position.Right}
         id="source-default"
-        className="!w-2 !h-2 !bg-zinc-400 dark:!bg-zinc-500 !border !border-white dark:!border-zinc-900"
+        className="!w-2 !h-2 !bg-zinc-400 dark:!bg-zinc-500 !border !border-white dark:!border-zinc-900 z-10"
       />
 
-      <div className="flex items-start justify-between gap-1.5 min-w-0">
-        <div className="flex items-center gap-1 min-w-0">
-          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
-            ▸
-          </span>
-          <span className="font-mono text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate block">
-            {node.label}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectNode(node.id);
+          onToggleOpen(node.id);
+        }}
+        onMouseEnter={() => onHoverNode(node.id)}
+        onMouseLeave={() => onHoverNode(null)}
+        className="w-full h-full p-2.5 flex flex-col justify-between text-left cursor-pointer rounded-md focus:outline-none"
+        title={`Click to open ${node.label}`}
+      >
+        <div className="flex items-start justify-between gap-1.5 min-w-0 w-full">
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
+              ▸
+            </span>
+            <span className="font-mono text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate block">
+              {node.label}
+            </span>
+          </div>
+          <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0">
+            {node.fileCount}f
           </span>
         </div>
-        <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0">
-          {node.fileCount}f
-        </span>
-      </div>
 
-      <div className="flex items-center justify-between text-[10px] font-mono pt-1 text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-800/80">
-        <span
-          className="text-emerald-600 dark:text-emerald-400 font-medium"
-          title="Incoming dependencies (fan-in) determines height"
-        >
-          ↓ {node.fanIn}
-        </span>
-        <span
-          className="text-amber-600 dark:text-amber-400 font-medium"
-          title="Outgoing dependencies (fan-out)"
-        >
-          ↑ {node.fanOut}
-        </span>
-      </div>
+        <div className="flex items-center justify-between text-[10px] font-mono pt-1 text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-800/80 w-full">
+          <span
+            className="text-emerald-600 dark:text-emerald-400 font-medium"
+            title="Incoming dependencies (fan-in) determines height"
+          >
+            ↓ {node.fanIn}
+          </span>
+          <span
+            className="text-amber-600 dark:text-amber-400 font-medium"
+            title="Outgoing dependencies (fan-out)"
+          >
+            ↑ {node.fanOut}
+          </span>
+        </div>
+      </button>
     </div>
   );
 }

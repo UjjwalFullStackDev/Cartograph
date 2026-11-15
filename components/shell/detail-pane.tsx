@@ -236,12 +236,13 @@ export function DetailPane({
                   const isHovered = hoveredFilePath === file.path;
 
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={file.path}
                       onClick={() => onSelectFilePath(file.path)}
                       onMouseEnter={() => onHoverFilePath(file.path)}
                       onMouseLeave={() => onHoverFilePath(null)}
-                      className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer transition-colors ${
+                      className={`w-full flex items-center justify-between px-2 py-1 rounded text-left cursor-pointer transition-colors ${
                         isHovered
                           ? "bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 ring-1 ring-blue-500/30"
                           : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
@@ -258,7 +259,7 @@ export function DetailPane({
                       <span className="text-emerald-600 dark:text-emerald-400 text-[10px] shrink-0 font-medium ml-2">
                         ↓{file.fanIn}
                       </span>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -283,12 +284,13 @@ export function DetailPane({
                   const isHovered = hoveredFilePath === file.path;
 
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={file.path}
                       onClick={() => onSelectFilePath(file.path)}
                       onMouseEnter={() => onHoverFilePath(file.path)}
                       onMouseLeave={() => onHoverFilePath(null)}
-                      className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer transition-colors ${
+                      className={`w-full flex items-center justify-between px-2 py-1 rounded text-left cursor-pointer transition-colors ${
                         isHovered
                           ? "bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 ring-1 ring-blue-500/30"
                           : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
@@ -311,7 +313,7 @@ export function DetailPane({
                           leaf
                         </span>
                       )}
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -394,12 +396,13 @@ export function DetailPane({
                   const isHovered = hoveredFilePath === f.path;
 
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={f.path}
                       onClick={() => onSelectFilePath(f.path)}
                       onMouseEnter={() => onHoverFilePath(f.path)}
                       onMouseLeave={() => onHoverFilePath(null)}
-                      className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer transition-colors ${
+                      className={`w-full flex items-center justify-between px-2 py-1 rounded text-left cursor-pointer transition-colors ${
                         isHovered
                           ? "bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 ring-1 ring-blue-500/30"
                           : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
@@ -425,7 +428,7 @@ export function DetailPane({
                           </span>
                         )}
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -503,12 +506,13 @@ export function DetailPane({
                     const isHovered = hoveredFilePath === targetPath;
 
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={targetPath}
                         onClick={() => onSelectFilePath(targetPath)}
                         onMouseEnter={() => onHoverFilePath(targetPath)}
                         onMouseLeave={() => onHoverFilePath(null)}
-                        className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer transition-colors ${
+                        className={`w-full flex items-center gap-1.5 px-2 py-1 rounded text-left cursor-pointer transition-colors ${
                           isHovered
                             ? "bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 ring-1 ring-amber-500/40"
                             : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
@@ -520,7 +524,7 @@ export function DetailPane({
                           style={{ backgroundColor: cat.color }}
                         />
                         <span className="truncate">{targetPath}</span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -543,12 +547,13 @@ export function DetailPane({
                     const isHovered = hoveredFilePath === sourcePath;
 
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={sourcePath}
                         onClick={() => onSelectFilePath(sourcePath)}
                         onMouseEnter={() => onHoverFilePath(sourcePath)}
                         onMouseLeave={() => onHoverFilePath(null)}
-                        className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer transition-colors ${
+                        className={`w-full flex items-center gap-1.5 px-2 py-1 rounded text-left cursor-pointer transition-colors ${
                           isHovered
                             ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 ring-1 ring-emerald-500/40"
                             : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
@@ -560,7 +565,7 @@ export function DetailPane({
                           style={{ backgroundColor: cat.color }}
                         />
                         <span className="truncate">{sourcePath}</span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
