@@ -1,55 +1,47 @@
 import { Suspense } from "react";
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { createDbClient } from "@/lib/db";
+import { createDbClient, type Database } from "@/lib/db";
+import type { QueryData, SupabaseClient } from "@supabase/supabase-js";
 
 interface ProjectRelation {
   name: string;
   repository_url: string;
 }
 
-interface AnalysisRow {
-  id: string;
-  project_id: string;
-  commit_hash: string | null;
-  status: "pending" | "fetching" | "selecting" | "parsing" | "completed" | "failed" | "stale";
-  stage: string | null;
-  error_message: string | null;
-  file_count: number;
-  edge_count: number;
-  created_at: string;
-  updated_at: string;
-  projects: ProjectRelation | ProjectRelation[] | null;
-}
+const getAnalysesQuery = (db: SupabaseClient<Database>) =>
+  db
+    .from("analyses")
+    .select(`
+      id,
+      project_id,
+      commit_hash,
+      status,
+      stage,
+      error_message,
+      file_count,
+      edge_count,
+      created_at,
+      updated_at,
+      projects (
+        name,
+        repository_url
+      )
+    `)
+    .order("created_at", { ascending: false });
+
+type AnalysisRow = QueryData<ReturnType<typeof getAnalysesQuery>>[number];
 
 async function getAnalyses(): Promise<{ analyses: AnalysisRow[]; error: string | null }> {
   try {
     const db = await createDbClient();
     // No organization filter in application code. RLS policies enforce isolation.
-    const { data, error } = await db
-      .from("analyses")
-      .select(`
-        id,
-        project_id,
-        commit_hash,
-        status,
-        stage,
-        error_message,
-        file_count,
-        edge_count,
-        created_at,
-        updated_at,
-        projects (
-          name,
-          repository_url
-        )
-      `)
-      .order("created_at", { ascending: false });
+    const { data, error } = await getAnalysesQuery(db);
 
     if (error) {
       return { analyses: [], error: error.message };
     }
 
-    return { analyses: (data as unknown as AnalysisRow[]) ?? [], error: null };
+    return { analyses: data ?? [], error: null };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown database query failure";
     return { analyses: [], error: msg };
@@ -108,10 +100,7 @@ function formatDate(dateStr: string): string {
 }
 
 function getProjectInfo(projects: AnalysisRow["projects"]): ProjectRelation {
-  if (Array.isArray(projects)) {
-    return projects[0] || { name: "unknown", repository_url: "" };
-  }
-  return projects || { name: "unknown", repository_url: "" };
+  return projects ?? { name: "unknown", repository_url: "" };
 }
 
 async function AnalysesDashboard() {
