@@ -1,6 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
 import { env } from "./env";
+import type { Database } from "./database.types";
+
+export type { Database };
 
 /**
  * Creates a server-side Supabase client carrying the signed-in Clerk JWT.
@@ -10,11 +13,19 @@ import { env } from "./env";
  * Sessions belong strictly to Clerk: Supabase session persistence and token
  * refreshing are disabled to prevent duplicate session handling.
  */
-export async function createDbClient(): Promise<SupabaseClient> {
+export async function createDbClient(): Promise<SupabaseClient<Database>> {
   const { getToken } = await auth();
-  const token = await getToken();
+  let token: string | null = null;
+  try {
+    token = await getToken({ template: "supabase" });
+  } catch {
+    token = null;
+  }
+  if (!token) {
+    token = await getToken();
+  }
 
-  return createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+  return createClient<Database>(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_ANON_KEY, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -29,4 +40,3 @@ export async function createDbClient(): Promise<SupabaseClient> {
     },
   });
 }
-

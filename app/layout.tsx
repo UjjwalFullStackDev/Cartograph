@@ -6,6 +6,7 @@ import {
   SignUpButton,
   UserButton,
 } from "@clerk/nextjs";
+import Link from "next/link";
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -61,9 +62,19 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ClerkProvider>
           <header className="flex h-11 w-full shrink-0 items-center justify-between border-b border-zinc-200 px-3 bg-white/50 backdrop-blur-xs dark:border-zinc-800 dark:bg-zinc-950/50">
             <div className="flex items-center gap-3">
-              <span className="font-mono text-xs font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+              <Link
+                href="/"
+                className="font-mono text-xs font-semibold tracking-tight text-zinc-900 hover:text-zinc-600 dark:text-zinc-100 dark:hover:text-zinc-300 transition-colors"
+              >
                 cartograph
-              </span>
+              </Link>
+              <span className="text-zinc-300 dark:text-zinc-700">/</span>
+              <Link
+                href="/preview"
+                className="font-mono text-[11px] text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors"
+              >
+                preview
+              </Link>
               <span className="text-zinc-300 dark:text-zinc-700">/</span>
               <Suspense fallback={<div className="h-6 w-24 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse" />}>
                 <Show when="signed-in">
