@@ -32,9 +32,15 @@ async function run() {
   const connectionString = `postgresql://postgres:${encodeURIComponent(password)}@db.${projectRef}.supabase.co:5432/postgres`;
   console.log(`Connecting to db.${projectRef}.supabase.co:5432...`);
 
+  const caCertPath = process.env.SUPABASE_CA_CERT_PATH || path.resolve(process.cwd(), "supabase/prod-ca-2021.crt");
+  const ca = process.env.SUPABASE_SSL_CA || (fs.existsSync(caCertPath) ? fs.readFileSync(caCertPath, "utf8") : undefined);
+
   const client = new Client({
     connectionString,
-    ssl: { rejectUnauthorized: false },
+    ssl: {
+      rejectUnauthorized: true,
+      ca,
+    },
   });
 
   await client.connect();
